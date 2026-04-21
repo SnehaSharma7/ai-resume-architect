@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { generateResume as generateResumeRequest } from "@/lib/api";
 
 type Section = "personal" | "experience" | "education" | "skills" | "jd";
 
@@ -101,6 +102,9 @@ export default function BuilderClient() {
   const [state, setState] = useState<BuilderState>(defaultState);
   const [activeSection, setActiveSection] = useState<Section>("personal");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const resumeRef = useRef<HTMLDivElement>(null);
 
   const updatePersonal = (field: keyof PersonalInfo, value: string) => {
     setState((prev) => ({ ...prev, personal: { ...prev.personal, [field]: value } }));
@@ -193,6 +197,92 @@ export default function BuilderClient() {
       }));
       setIsAnalyzing(false);
     }, 1800);
+  };
+
+  const handleExportPDF = async () => {
+    setExportError("");
+
+    const name = state.personal.name.trim();
+    const skills = state.skills.trim();
+    const education = state.education
+      .map((item) => [item.degree, item.institution, item.year].filter(Boolean).join(" - "))
+      .filter(Boolean)
+      .join("\n");
+    const experience = state.experience
+      .map((item) => {
+        const headline = [item.role, item.company, item.period].filter(Boolean).join(" - ");
+        const bullets = item.bullets.filter(Boolean).join("; ");
+        return [headline, bullets].filter(Boolean).join(": ");
+      })
+      .filter(Boolean)
+      .join("\n");
+
+    if (!name) {
+      setExportError("Please fill in at least your name before exporting.");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      // Save to backend
+      if (skills && education && experience) {
+        await generateResumeRequest({ name, skills, education, experience }).catch(() => {});
+      }
+
+      // Print the resume preview as PDF
+      const resumeEl = resumeRef.current;
+      if (!resumeEl) return;
+
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        setExportError("Pop-up blocked. Please allow pop-ups and try again.");
+        return;
+      }
+
+      // Collect all stylesheets from the current page
+      const styleSheets = Array.from(document.styleSheets);
+      let cssText = "";
+      for (const sheet of styleSheets) {
+        try {
+          const rules = Array.from(sheet.cssRules || []);
+          cssText += rules.map((r) => r.cssText).join("\n");
+        } catch {
+          // cross-origin sheets – copy via link tag instead
+          if (sheet.href) {
+            cssText += `@import url("${sheet.href}");\n`;
+          }
+        }
+      }
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${name} - Resume</title>
+          <style>
+            ${cssText}
+            @page { margin: 0; }
+            @media print {
+              html, body { margin: 0; padding: 0; }
+              body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            }
+            body { margin: 0; padding: 20px 0; background: white; display: flex; justify-content: center; }
+            .resume-root { width: 100%; max-width: 672px; margin: 0 auto; border-radius: 0 !important; box-shadow: none !important; min-height: auto !important; }
+          </style>
+        </head>
+        <body>
+          <div class="resume-root">${resumeEl.innerHTML}</div>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => { printWindow.print(); printWindow.close(); }, 600);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Export failed.");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const sections: { id: Section; label: string }[] = [
@@ -598,73 +688,87 @@ export default function BuilderClient() {
                 <span className="text-xs font-bold text-violet-300">{state.atsScore}%</span>
               </div>
             )}
-            <button className="text-xs bg-violet-600 hover:bg-violet-500 text-white px-4 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-lg shadow-violet-900/50">
+            <button
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="text-xs bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-lg shadow-violet-900/50"
+            >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              Export PDF
+              {isExporting ? "Exporting..." : "Export PDF"}
             </button>
           </div>
+          {exportError ? (
+            <div className="mx-4 mt-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              {exportError}
+            </div>
+          ) : null}
         </div>
 
         {/* Resume preview */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center">
-          <div className="w-full max-w-2xl bg-white text-gray-900 rounded-xl shadow-2xl shadow-black/40 min-h-[900px] overflow-hidden">
+          <div ref={resumeRef} className="w-full max-w-2xl bg-white text-gray-900 rounded-xl shadow-2xl shadow-black/40 min-h-[900px] overflow-hidden" style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}>
             {/* Resume Header */}
-            <div className="bg-gradient-to-r from-violet-700 to-violet-900 px-8 py-7 text-white">
-              <h1 className="text-2xl font-bold tracking-wide">
+            <div className="px-10 pt-10 pb-2 text-center border-b-2 border-gray-800">
+              <h1 className="text-2xl font-bold tracking-wide text-gray-900 uppercase">
                 {state.personal.name || (
-                  <span className="opacity-40 italic font-normal text-lg">Your Name</span>
+                  <span className="opacity-30 italic font-normal text-lg normal-case">Your Name</span>
                 )}
               </h1>
               {state.personal.title && (
-                <p className="text-violet-200 text-sm mt-1">{state.personal.title}</p>
+                <p className="text-sm text-gray-600 mt-1">{state.personal.title}</p>
               )}
-              <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-xs text-violet-200/80">
+              <div className="flex flex-wrap justify-center gap-x-4 gap-y-0.5 mt-2 text-xs text-gray-600">
                 {state.personal.email && <span>{state.personal.email}</span>}
-                {state.personal.phone && <span>{state.personal.phone}</span>}
-                {state.personal.location && <span>{state.personal.location}</span>}
-                {state.personal.linkedin && <span>{state.personal.linkedin}</span>}
+                {state.personal.phone && (
+                  <><span className="text-gray-400">|</span><span>{state.personal.phone}</span></>
+                )}
+                {state.personal.location && (
+                  <><span className="text-gray-400">|</span><span>{state.personal.location}</span></>
+                )}
+                {state.personal.linkedin && (
+                  <><span className="text-gray-400">|</span><span>{state.personal.linkedin}</span></>
+                )}
               </div>
             </div>
 
-            <div className="px-8 py-6 space-y-6 text-sm">
+            <div className="px-10 py-6 space-y-5 text-sm">
               {/* Summary */}
               {state.personal.summary && (
                 <section>
-                  <h2 className="text-xs font-bold text-violet-700 uppercase tracking-widest border-b border-violet-200 pb-1.5 mb-3">
+                  <h2 className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-1 mb-2">
                     Professional Summary
                   </h2>
-                  <p className="text-gray-600 leading-relaxed">{state.personal.summary}</p>
+                  <p className="text-gray-700 leading-relaxed text-[13px]">{state.personal.summary}</p>
                 </section>
               )}
 
               {/* Experience */}
               {state.experience.some((e) => e.company || e.role) && (
                 <section>
-                  <h2 className="text-xs font-bold text-violet-700 uppercase tracking-widest border-b border-violet-200 pb-1.5 mb-3">
-                    Work Experience
+                  <h2 className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-1 mb-3">
+                    Professional Experience
                   </h2>
-                  <div className="space-y-5">
+                  <div className="space-y-4">
                     {state.experience
                       .filter((e) => e.company || e.role)
                       .map((exp) => (
                         <div key={exp.id}>
                           <div className="flex items-start justify-between">
                             <div>
-                              <div className="font-semibold text-gray-900">{exp.role}</div>
-                              <div className="text-gray-500 text-xs mt-0.5">{exp.company}</div>
+                              <div className="font-bold text-gray-900 text-[13px]">{exp.role}</div>
+                              <div className="text-gray-600 text-xs italic">{exp.company}</div>
                             </div>
                             {exp.period && (
-                              <div className="text-gray-400 text-xs flex-shrink-0 ml-4">{exp.period}</div>
+                              <div className="text-gray-500 text-xs flex-shrink-0 ml-4 font-medium">{exp.period}</div>
                             )}
                           </div>
                           {exp.bullets.filter(Boolean).length > 0 && (
-                            <ul className="mt-2 space-y-1.5 ml-3">
+                            <ul className="mt-1.5 space-y-1 ml-4 list-disc">
                               {exp.bullets.filter(Boolean).map((b, i) => (
-                                <li key={i} className="flex gap-2 text-gray-600">
-                                  <span className="text-violet-500 flex-shrink-0">•</span>
-                                  <span>{b}</span>
+                                <li key={i} className="text-gray-700 text-[13px] leading-snug">
+                                  {b}
                                 </li>
                               ))}
                             </ul>
@@ -678,19 +782,19 @@ export default function BuilderClient() {
               {/* Education */}
               {state.education.some((e) => e.institution) && (
                 <section>
-                  <h2 className="text-xs font-bold text-violet-700 uppercase tracking-widest border-b border-violet-200 pb-1.5 mb-3">
+                  <h2 className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-1 mb-3">
                     Education
                   </h2>
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {state.education
                       .filter((e) => e.institution)
                       .map((edu) => (
                         <div key={edu.id} className="flex items-start justify-between">
                           <div>
-                            <div className="font-semibold text-gray-900">{edu.institution}</div>
-                            <div className="text-gray-500 text-xs mt-0.5">{edu.degree}</div>
+                            <div className="font-bold text-gray-900 text-[13px]">{edu.degree}</div>
+                            <div className="text-gray-600 text-xs italic">{edu.institution}</div>
                           </div>
-                          {edu.year && <div className="text-gray-400 text-xs flex-shrink-0 ml-4">{edu.year}</div>}
+                          {edu.year && <div className="text-gray-500 text-xs flex-shrink-0 ml-4 font-medium">{edu.year}</div>}
                         </div>
                       ))}
                   </div>
@@ -700,23 +804,16 @@ export default function BuilderClient() {
               {/* Skills */}
               {state.skills.trim() && (
                 <section>
-                  <h2 className="text-xs font-bold text-violet-700 uppercase tracking-widest border-b border-violet-200 pb-1.5 mb-3">
-                    Skills
+                  <h2 className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-1 mb-2">
+                    Technical Skills
                   </h2>
-                  <div className="flex flex-wrap gap-2">
+                  <p className="text-gray-700 text-[13px] leading-relaxed">
                     {state.skills
                       .split(/[,\n]/)
                       .map((s) => s.trim())
                       .filter(Boolean)
-                      .map((skill) => (
-                        <span
-                          key={skill}
-                          className="bg-violet-50 border border-violet-200 text-violet-700 text-xs px-2.5 py-1 rounded-full"
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                  </div>
+                      .join("  \u00B7  ")}
+                  </p>
                 </section>
               )}
 
@@ -726,8 +823,8 @@ export default function BuilderClient() {
                 !state.education.some((e) => e.institution) &&
                 !state.skills.trim() && (
                   <div className="flex flex-col items-center justify-center py-24 text-center">
-                    <div className="w-14 h-14 bg-violet-50 rounded-2xl flex items-center justify-center mb-4">
-                      <svg className="w-7 h-7 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center mb-4 border border-gray-200">
+                      <svg className="w-7 h-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                     </div>

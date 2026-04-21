@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import GoogleAuthButton from "@/app/components/GoogleAuthButton";
+import SignUpForm from "@/app/components/SignUpForm";
 
 export default function SignUpPage() {
   const googleEnabled =
@@ -25,62 +27,7 @@ export default function SignUpPage() {
             <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3">Create your account</h1>
             <p className="text-slate-400 mb-8">Build your first ATS-ready resume in under 10 minutes.</p>
 
-            <form className="space-y-4" action="#" method="post">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <label className="block">
-                  <span className="text-sm text-slate-300">First Name</span>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ayaan"
-                    className="mt-1.5 w-full rounded-xl border border-slate-700/70 bg-[#0d0d1a] px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-sm text-slate-300">Last Name</span>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Khan"
-                    className="mt-1.5 w-full rounded-xl border border-slate-700/70 bg-[#0d0d1a] px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
-                  />
-                </label>
-              </div>
-
-              <label className="block">
-                <span className="text-sm text-slate-300">Email Address</span>
-                <input
-                  type="email"
-                  required
-                  placeholder="you@example.com"
-                  className="mt-1.5 w-full rounded-xl border border-slate-700/70 bg-[#0d0d1a] px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-sm text-slate-300">Password</span>
-                <input
-                  type="password"
-                  required
-                  placeholder="Create a strong password"
-                  className="mt-1.5 w-full rounded-xl border border-slate-700/70 bg-[#0d0d1a] px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
-                />
-              </label>
-
-              <label className="flex items-start gap-3 text-sm text-slate-400">
-                <input type="checkbox" required className="mt-0.5 accent-violet-500" />
-                <span>
-                  I agree to the Terms of Service and Privacy Policy.
-                </span>
-              </label>
-
-              <button
-                type="submit"
-                className="w-full rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold py-3.5 transition-all duration-200 shadow-lg shadow-violet-900/50"
-              >
-                Create Account
-              </button>
-            </form>
+            <SignUpForm />
 
             <div className="my-6 flex items-center gap-3">
               <div className="h-px flex-1 bg-slate-800" />
@@ -88,12 +35,14 @@ export default function SignUpPage() {
               <div className="h-px flex-1 bg-slate-800" />
             </div>
 
-            <GoogleAuthButton
-              mode="signup"
-              defaultCallbackUrl="/dashboard"
-              enabled={googleEnabled}
-              disabledText="Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local, then restart dev server."
-            />
+            <Suspense fallback={<div className="text-xs text-slate-500">Loading Google sign-in...</div>}>
+              <GoogleAuthButton
+                mode="signup"
+                defaultCallbackUrl="/dashboard"
+                enabled={googleEnabled}
+                disabledText="Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local, then restart dev server."
+              />
+            </Suspense>
 
             <p className="text-sm text-slate-400 mt-6 text-center">
               Already have an account?{" "}

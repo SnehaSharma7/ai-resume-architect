@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import GoogleAuthButton from "@/app/components/GoogleAuthButton";
+import SignInForm from "@/app/components/SignInForm";
 
 type SignInPageProps = {
   searchParams: Promise<{
     callbackUrl?: string;
     error?: string;
+    registered?: string;
   }>;
 };
 
@@ -15,6 +18,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
     Boolean(process.env.GOOGLE_CLIENT_SECRET);
 
   const showOAuthError = query.error === "google" || query.error === "OAuthSignin";
+  const showRegistered = query.registered === "1";
 
   return (
     <section className="relative min-h-[calc(100vh-4rem)] flex items-center py-14 overflow-hidden">
@@ -41,39 +45,13 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
               </div>
             ) : null}
 
-            <form className="space-y-4" action="#" method="post">
-              <label className="block">
-                <span className="text-sm text-slate-300">Email Address</span>
-                <input
-                  type="email"
-                  required
-                  placeholder="you@example.com"
-                  className="mt-1.5 w-full rounded-xl border border-slate-700/70 bg-[#0d0d1a] px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
-                />
-              </label>
+            {showRegistered ? (
+              <div className="mb-5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                Account created successfully. Please sign in.
+              </div>
+            ) : null}
 
-              <label className="block">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-300">Password</span>
-                  <a href="#" className="text-xs text-violet-400 hover:text-violet-300 transition-colors">
-                    Forgot password?
-                  </a>
-                </div>
-                <input
-                  type="password"
-                  required
-                  placeholder="Enter your password"
-                  className="mt-1.5 w-full rounded-xl border border-slate-700/70 bg-[#0d0d1a] px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
-                />
-              </label>
-
-              <button
-                type="submit"
-                className="w-full rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold py-3.5 transition-all duration-200 shadow-lg shadow-violet-900/50"
-              >
-                Sign In
-              </button>
-            </form>
+            <SignInForm callbackUrl={query.callbackUrl ?? "/dashboard"} />
 
             <div className="my-6 flex items-center gap-3">
               <div className="h-px flex-1 bg-slate-800" />
@@ -81,12 +59,14 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
               <div className="h-px flex-1 bg-slate-800" />
             </div>
 
-            <GoogleAuthButton
-              mode="signin"
-              defaultCallbackUrl={query.callbackUrl ?? "/dashboard"}
-              enabled={googleEnabled}
-              disabledText="Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local, then restart dev server."
-            />
+            <Suspense fallback={<div className="text-xs text-slate-500">Loading Google sign-in...</div>}>
+              <GoogleAuthButton
+                mode="signin"
+                defaultCallbackUrl={query.callbackUrl ?? "/dashboard"}
+                enabled={googleEnabled}
+                disabledText="Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local, then restart dev server."
+              />
+            </Suspense>
 
             <p className="text-sm text-slate-400 mt-6 text-center">
               New here?{" "}

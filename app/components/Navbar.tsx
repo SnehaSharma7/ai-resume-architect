@@ -1,12 +1,63 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { getSession, clearSession } from "@/lib/auth";
+import { getSession as getNextAuthSession, signOut } from "next-auth/react";
+
+type AuthSource = "local" | "oauth";
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [authSource, setAuthSource] = useState<AuthSource | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
+
+  // Refresh session state on route changes
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveSession = async () => {
+      const localSession = getSession();
+      if (localSession) {
+        if (!cancelled) {
+          setUserEmail(localSession.email);
+          setUserName(null);
+          setAuthSource("local");
+        }
+        return;
+      }
+
+      const oauthSession = await getNextAuthSession();
+      const oauthEmail = oauthSession?.user?.email ?? null;
+      if (!cancelled) {
+        setUserEmail(oauthEmail);
+        setUserName(oauthSession?.user?.name ?? null);
+        setAuthSource(oauthEmail ? "oauth" : null);
+      }
+    };
+
+    void resolveSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
+
+  const handleLogout = () => {
+    if (authSource === "oauth") {
+      void signOut({ callbackUrl: "/" });
+      return;
+    }
+
+    clearSession();
+    setUserEmail(null);
+    setAuthSource(null);
+    router.push("/");
+  };
 
   const navLinks = [
     { label: "Features", href: "/#features" },
@@ -57,6 +108,16 @@ export default function Navbar() {
               >
                 ← Dashboard
               </Link>
+            ) : userEmail ? (
+              <>
+                <span className="text-xs text-slate-500 max-w-[140px] truncate">{userName ?? userEmail}</span>
+                <button
+                  onClick={handleLogout}
+                  className="text-slate-400 hover:text-white text-sm bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/40 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  Sign Out
+                </button>
+              </>
             ) : (
               <>
                 <Link
@@ -107,20 +168,31 @@ export default function Navbar() {
               </Link>
             ))}
             <div className="pt-2 space-y-2">
-              <Link
-                href="/signin"
-                onClick={() => setIsOpen(false)}
-                className="block text-slate-300 hover:text-white text-sm py-2.5 px-2 rounded-lg hover:bg-violet-900/20 transition-colors"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/signup"
-                onClick={() => setIsOpen(false)}
-                className="block bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors text-center"
-              >
-                Create Account
-              </Link>
+                {userEmail ? (
+                  <button
+                    onClick={() => { setIsOpen(false); handleLogout(); }}
+                    className="block w-full text-left bg-slate-800/60 text-slate-300 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+                  >
+                    Sign Out ({userEmail})
+                  </button>
+                ) : (
+                  <>
+                    <Link
+                      href="/signin"
+                      onClick={() => setIsOpen(false)}
+                      className="block text-slate-300 hover:text-white text-sm py-2.5 px-2 rounded-lg hover:bg-violet-900/20 transition-colors"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      href="/signup"
+                      onClick={() => setIsOpen(false)}
+                      className="block bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors text-center"
+                    >
+                      Create Account
+                    </Link>
+                  </>
+                )}
               <Link
                 href="/builder"
                 onClick={() => setIsOpen(false)}
