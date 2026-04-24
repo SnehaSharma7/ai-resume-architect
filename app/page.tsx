@@ -38,9 +38,9 @@ const features = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
       </svg>
     ),
-    title: "Stripe Subscription",
+    title: "Razorpay Payments",
     description:
-      "Tiered SaaS model: Free plan for 1 resume, Pro plan for unlimited resumes, cover letters, and premium templates with instant access upon payment.",
+      "Tiered SaaS model: Free plan for 1 resume, Pro plan for unlimited resumes, cover letters, and premium templates with instant UPI/card payment.",
   },
 ];
 
@@ -68,7 +68,7 @@ const steps = [
 const pricingPlans = [
   {
     name: "Free",
-    price: "$0",
+    price: "₹0",
     period: "forever",
     description: "Perfect for getting started with one job application.",
     features: [
@@ -84,7 +84,7 @@ const pricingPlans = [
   },
   {
     name: "Pro",
-    price: "$12",
+    price: "₹999",
     period: "per month",
     description: "For active job seekers who need unlimited power.",
     features: [
@@ -97,7 +97,7 @@ const pricingPlans = [
       "Dashboard & History",
     ],
     cta: "Start Pro Trial",
-    href: "/builder",
+    href: "/pricing",
     highlighted: true,
   },
 ];

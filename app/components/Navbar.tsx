@@ -62,7 +62,7 @@ export default function Navbar() {
   const navLinks = [
     { label: "Features", href: "/#features" },
     { label: "How it Works", href: "/#how-it-works" },
-    { label: "Pricing", href: "/#pricing" },
+    { label: "Pricing", href: "/pricing" },
     { label: "Dashboard", href: "/dashboard" },
   ];
 
@@ -75,9 +75,14 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-violet-800 rounded-lg flex items-center justify-center shadow-lg shadow-violet-900/50">
-              <span className="text-white font-bold text-xs tracking-tight">CF</span>
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/resume-builder.jpg"
+              alt="CareerForge Pro logo"
+              width={32}
+              height={32}
+              className="rounded-lg object-cover"
+            />
             <span className="text-white font-bold text-lg">
               CareerForge{" "}
               <span className="text-violet-400">Pro</span>

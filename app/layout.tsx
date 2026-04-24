@@ -18,6 +18,9 @@ export const metadata: Metadata = {
   title: "CareerForge Pro – ATS-Proof Resume Generator & Job Matcher",
   description:
     "AI-powered resume builder that optimizes your resume for ATS systems. Paste a job description and get an instant ATS score with keyword suggestions.",
+  icons: {
+    icon: "/resume-builder.ico",
+  },
 };
 
 export default function RootLayout({

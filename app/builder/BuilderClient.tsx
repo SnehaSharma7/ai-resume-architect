@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { generateResume as generateResumeRequest } from "@/lib/api";
 
-type Section = "personal" | "experience" | "education" | "skills" | "jd";
+type Section = "personal" | "experience" | "education" | "skills" | "jd" | "coverletter";
 
 interface PersonalInfo {
   name: string;
@@ -38,6 +38,10 @@ interface BuilderState {
   jobDescription: string;
   atsScore: number | null;
   keywords: string[];
+  matchedKeywords: string[];
+  missingKeywords: string[];
+  suggestions: string[];
+  coverLetter: string;
 }
 
 const defaultState: BuilderState = {
@@ -64,6 +68,10 @@ const defaultState: BuilderState = {
   jobDescription: "",
   atsScore: null,
   keywords: [],
+  matchedKeywords: [],
+  missingKeywords: [],
+  suggestions: [],
+  coverLetter: "",
 };
 
 function ScoreRing({ score }: { score: number }) {
@@ -104,6 +112,8 @@ export default function BuilderClient() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [rewritingBullet, setRewritingBullet] = useState<string | null>(null); // "expId-idx"
+  const [isGeneratingCL, setIsGeneratingCL] = useState(false);
   const resumeRef = useRef<HTMLDivElement>(null);
 
   const updatePersonal = (field: keyof PersonalInfo, value: string) => {
@@ -168,35 +178,118 @@ export default function BuilderClient() {
     }));
   };
 
-  const analyzeJD = () => {
+  const analyzeJD = async () => {
     if (!state.jobDescription.trim()) return;
     setIsAnalyzing(true);
 
-    // Simulated AI JD analysis
-    setTimeout(() => {
-      const sampleKeywords = [
-        "Python", "Agile", "Leadership", "React", "TypeScript",
-        "Communication", "Problem-solving", "REST APIs",
-      ];
-      // Calculate a score based on how many keywords appear in resume text
+    try {
       const resumeText = [
         state.personal.summary,
         ...state.experience.flatMap((e) => [e.role, e.company, ...e.bullets]),
         state.skills,
-      ]
-        .join(" ")
-        .toLowerCase();
+      ].join(" ");
 
-      const matched = sampleKeywords.filter((k) => resumeText.includes(k.toLowerCase()));
-      const score = Math.min(95, 30 + matched.length * 10);
+      const res = await fetch("/api/ai/analyze-jd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobDescription: state.jobDescription, resumeText }),
+      });
 
+      const data = await res.json();
       setState((prev) => ({
         ...prev,
-        atsScore: score,
-        keywords: sampleKeywords,
+        atsScore: data.score ?? 0,
+        keywords: data.keywords ?? [],
+        matchedKeywords: data.matched ?? [],
+        missingKeywords: data.missing ?? [],
+        suggestions: data.suggestions ?? [],
       }));
+    } catch {
+      // Fallback to simple analysis
+      setState((prev) => ({
+        ...prev,
+        atsScore: 30,
+        keywords: [],
+        matchedKeywords: [],
+        missingKeywords: [],
+        suggestions: ["Unable to analyze — check your connection and try again."],
+      }));
+    } finally {
       setIsAnalyzing(false);
-    }, 1800);
+    }
+  };
+
+  const rewriteBullet = async (expId: string, bulletIdx: number) => {
+    const key = `${expId}-${bulletIdx}`;
+    setRewritingBullet(key);
+
+    try {
+      const exp = state.experience.find((e) => e.id === expId);
+      const bullet = exp?.bullets[bulletIdx] ?? "";
+      if (!bullet.trim()) {
+        setRewritingBullet(null);
+        return;
+      }
+
+      const res = await fetch("/api/ai/rewrite-bullet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bullet,
+          keywords: state.missingKeywords.length > 0 ? state.missingKeywords : state.keywords,
+          role: exp?.role,
+          company: exp?.company,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.rewritten) {
+        updateBullet(expId, bulletIdx, data.rewritten);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setRewritingBullet(null);
+    }
+  };
+
+  const generateCoverLetter = async () => {
+    if (!state.personal.name || !state.jobDescription) return;
+    setIsGeneratingCL(true);
+
+    try {
+      const experience = state.experience
+        .filter((e) => e.company || e.role)
+        .map((e) => {
+          const headline = [e.role, e.company, e.period].filter(Boolean).join(" at ");
+          const bullets = e.bullets.filter(Boolean).join(". ");
+          return [headline, bullets].filter(Boolean).join(": ");
+        })
+        .join("\n");
+
+      const res = await fetch("/api/ai/cover-letter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: state.personal.name,
+          title: state.personal.title,
+          experience,
+          skills: state.skills,
+          jobDescription: state.jobDescription,
+          companyName: "",
+        }),
+      });
+
+      const data = await res.json();
+      setState((prev) => ({ ...prev, coverLetter: data.coverLetter ?? "" }));
+    } catch {
+      setState((prev) => ({
+        ...prev,
+        coverLetter: "Failed to generate cover letter. Please try again.",
+      }));
+    } finally {
+      setIsGeneratingCL(false);
+    }
   };
 
   const handleExportPDF = async () => {
@@ -291,6 +384,7 @@ export default function BuilderClient() {
     { id: "education", label: "Education" },
     { id: "skills", label: "Skills" },
     { id: "jd", label: "JD Analysis" },
+    { id: "coverletter", label: "Cover Letter" },
   ];
 
   const inputClass =
@@ -478,6 +572,23 @@ export default function BuilderClient() {
                             value={bullet}
                             onChange={(e) => updateBullet(exp.id, idx, e.target.value)}
                           />
+                          <button
+                            onClick={() => rewriteBullet(exp.id, idx)}
+                            disabled={rewritingBullet === `${exp.id}-${idx}` || !bullet.trim()}
+                            title="AI Rewrite – optimize this bullet for ATS"
+                            className="mt-1 p-1.5 rounded-lg text-amber-400 hover:bg-amber-400/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                          >
+                            {rewritingBullet === `${exp.id}-${idx}` ? (
+                              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                            )}
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -642,14 +753,7 @@ export default function BuilderClient() {
                     <div className="text-xs text-slate-400 mb-2">Extracted Keywords</div>
                     <div className="flex flex-wrap gap-2">
                       {state.keywords.map((kw) => {
-                        const resumeText = [
-                          state.personal.summary,
-                          ...state.experience.flatMap((e) => [e.role, ...e.bullets]),
-                          state.skills,
-                        ]
-                          .join(" ")
-                          .toLowerCase();
-                        const matched = resumeText.includes(kw.toLowerCase());
+                        const matched = state.matchedKeywords.map(k => k.toLowerCase()).includes(kw.toLowerCase());
                         return (
                           <span
                             key={kw}
@@ -666,6 +770,77 @@ export default function BuilderClient() {
                       })}
                     </div>
                   </div>
+                  {state.suggestions.length > 0 && (
+                    <div>
+                      <div className="text-xs text-slate-400 mb-2">Suggestions</div>
+                      <ul className="space-y-1.5">
+                        {state.suggestions.map((s, i) => (
+                          <li key={i} className="text-xs text-amber-300/80 flex items-start gap-2">
+                            <span className="text-amber-400 mt-0.5">→</span>
+                            <span>{s}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Cover Letter Generator */}
+          {activeSection === "coverletter" && (
+            <div className="space-y-4">
+              <h2 className="text-sm font-semibold text-white">Cover Letter Generator</h2>
+              <p className="text-slate-400 text-xs leading-relaxed">
+                Generate a tailored cover letter based on your resume and the Job Description.
+                {!state.jobDescription.trim() && (
+                  <span className="text-amber-400 block mt-1">
+                    Tip: Paste a Job Description in the &quot;JD Analysis&quot; tab first for best results.
+                  </span>
+                )}
+              </p>
+              <button
+                onClick={generateCoverLetter}
+                disabled={isGeneratingCL || !state.personal.name.trim() || !state.jobDescription.trim()}
+                className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-violet-900/50"
+              >
+                {isGeneratingCL ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Generating Cover Letter...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Generate Cover Letter
+                  </>
+                )}
+              </button>
+              {state.coverLetter && (
+                <div className="space-y-3">
+                  <textarea
+                    rows={18}
+                    className={`${inputClass} resize-none`}
+                    value={state.coverLetter}
+                    onChange={(e) => setState((prev) => ({ ...prev, coverLetter: e.target.value }))}
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(state.coverLetter);
+                    }}
+                    className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1.5 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Copy to Clipboard
+                  </button>
                 </div>
               )}
             </div>
