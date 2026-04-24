@@ -64,7 +64,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
                 mode="signin"
                 defaultCallbackUrl={query.callbackUrl ?? "/dashboard"}
                 enabled={googleEnabled}
-                disabledText="Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local, then restart dev server."
+                disabledText="Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your environment variables (Vercel Project Settings for production), then redeploy/restart."
               />
             </Suspense>
 
