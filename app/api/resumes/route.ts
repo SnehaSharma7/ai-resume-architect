@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  return NextResponse.json([
-    { id: 1, title: "My Resume" }
-  ]);
+  return NextResponse.json({
+    resumes: ["Frontend Engineer - Acme Corp", "Product Manager - Growth Team"],
+  });
 }

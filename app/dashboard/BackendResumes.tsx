@@ -6,7 +6,7 @@ import { getResumes } from "@/lib/api";
 
 function extractName(resume: string): string {
   const match = resume.match(/Name:\s*(.+)/i);
-  return match ? match[1].trim() : "Untitled Resume";
+  return match ? match[1].trim() : (resume.trim() || "Untitled Resume");
 }
 
 export default function BackendResumes() {
