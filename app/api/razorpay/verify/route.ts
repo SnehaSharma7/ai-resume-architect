@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { razorpayVerifySchema } from "@/lib/validations";
 
 export async function POST(req: NextRequest) {
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -8,17 +9,21 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = await req.json();
-
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return NextResponse.json({ error: "Missing payment details" }, { status: 400 });
+    const body = await req.json().catch(() => ({}));
+    const parsed = razorpayVerifySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Invalid input." },
+        { status: 400 }
+      );
     }
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = parsed.data;
 
     // Verify signature
-    const body = `${razorpay_order_id}|${razorpay_payment_id}`;
+    const sigPayload = `${razorpay_order_id}|${razorpay_payment_id}`;
     const expectedSignature = crypto
       .createHmac("sha256", keySecret)
-      .update(body)
+      .update(sigPayload)
       .digest("hex");
 
     if (expectedSignature !== razorpay_signature) {

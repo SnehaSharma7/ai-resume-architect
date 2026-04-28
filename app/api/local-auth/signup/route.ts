@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { signupSchema } from "@/lib/validations";
 
 type LocalUser = {
   email: string;
@@ -18,12 +19,15 @@ function getUsersStore(): LocalUser[] {
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
-  const password = typeof body?.password === "string" ? body.password : "";
 
-  if (!email || !password) {
-    return NextResponse.json({ message: "Email and password are required." }, { status: 400 });
+  const parsed = signupSchema.safeParse(body);
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? "Invalid input.";
+    return NextResponse.json({ message }, { status: 400 });
   }
+
+  const { email: rawEmail, password } = parsed.data;
+  const email = rawEmail.trim().toLowerCase();
 
   const users = getUsersStore();
   const alreadyExists = users.some((user) => user.email === email);

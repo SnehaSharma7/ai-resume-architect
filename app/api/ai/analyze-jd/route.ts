@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { analyzeJdSchema } from "@/lib/validations";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 export async function POST(req: NextRequest) {
-  const { jobDescription, resumeText } = await req.json();
+  const body = await req.json().catch(() => ({}));
 
-  if (!jobDescription || typeof jobDescription !== "string") {
-    return NextResponse.json({ error: "Job description is required" }, { status: 400 });
+  const parsed = analyzeJdSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
+      { status: 400 }
+    );
   }
+
+  const { jobDescription, resumeText } = parsed.data;
 
   if (!GEMINI_API_KEY) {
     // Fallback: simple keyword extraction without AI

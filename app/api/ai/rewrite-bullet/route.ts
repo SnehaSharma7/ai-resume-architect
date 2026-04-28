@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rewriteBulletSchema } from "@/lib/validations";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 export async function POST(req: NextRequest) {
-  const { bullet, keywords, role, company } = await req.json();
+  const body = await req.json().catch(() => ({}));
 
-  if (!bullet || typeof bullet !== "string") {
-    return NextResponse.json({ error: "Bullet text is required" }, { status: 400 });
+  const parsed = rewriteBulletSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
+      { status: 400 }
+    );
   }
+
+  const { bullet, keywords, role, company } = parsed.data;
 
   if (!GEMINI_API_KEY) {
     // Fallback: simple keyword insertion

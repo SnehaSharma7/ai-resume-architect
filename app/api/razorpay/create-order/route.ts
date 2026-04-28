@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
+import { razorpayOrderSchema } from "@/lib/validations";
 
 function getRazorpay() {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -10,7 +11,15 @@ function getRazorpay() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { email } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const parsed = razorpayOrderSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Invalid input." },
+        { status: 400 }
+      );
+    }
+    const { email } = parsed.data;
 
     const razorpay = getRazorpay();
     if (!razorpay) {

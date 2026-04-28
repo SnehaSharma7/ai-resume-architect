@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { coverLetterSchema } from "@/lib/validations";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 export async function POST(req: NextRequest) {
-  const { name, title, experience, skills, jobDescription, companyName } = await req.json();
+  const body = await req.json().catch(() => ({}));
 
-  if (!name || !jobDescription) {
+  const parsed = coverLetterSchema.safeParse(body);
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "Name and job description are required" },
+      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
       { status: 400 }
     );
   }
+
+  const { name, title, experience, skills, jobDescription, companyName } = parsed.data;
 
   if (!GEMINI_API_KEY) {
     return NextResponse.json({
@@ -69,11 +73,11 @@ Respond with ONLY the cover letter text.`;
 
 function fallbackCoverLetter(
   name: string,
-  title: string,
-  experience: string,
-  skills: string,
+  title: string | undefined,
+  experience: string | undefined,
+  skills: string | undefined,
   jobDescription: string,
-  companyName: string
+  companyName: string | undefined
 ): string {
   const company = companyName || "your organization";
   const role = title || "the advertised position";
