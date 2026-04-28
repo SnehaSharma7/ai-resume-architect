@@ -3,11 +3,31 @@ import Footer from "@/app/components/Footer";
 import BackendResumes from "@/app/dashboard/BackendResumes";
 import AuthGuard from "@/app/components/AuthGuard";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions";
 
 export const metadata: Metadata = {
   title: "Dashboard – CareerForge Pro",
   description: "Manage your resumes and cover letters in one place.",
 };
+
+function hasValidLocalSessionCookie(raw: string | undefined): boolean {
+  if (!raw) return false;
+
+  try {
+    const parsed = JSON.parse(raw) as { email?: unknown; token?: unknown };
+    return (
+      typeof parsed.email === "string" &&
+      parsed.email.length > 0 &&
+      typeof parsed.token === "string" &&
+      parsed.token.startsWith("local:")
+    );
+  } catch {
+    return false;
+  }
+}
 
 const mockResumes = [
   {
@@ -73,7 +93,19 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const [oauthSession, cookieStore] = await Promise.all([
+    getServerSession(authOptions),
+    cookies(),
+  ]);
+
+  const localSessionCookie = cookieStore.get("cf_session")?.value;
+  const isAuthenticated = Boolean(oauthSession?.user?.email) || hasValidLocalSessionCookie(localSessionCookie);
+
+  if (!isAuthenticated) {
+    redirect("/signin?callbackUrl=/dashboard");
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-10">

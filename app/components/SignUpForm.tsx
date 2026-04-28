@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signup } from "@/lib/api";
+import { signupSchema } from "@/lib/validations";
 
 export default function SignUpForm() {
   const router = useRouter();
@@ -10,23 +11,41 @@ export default function SignUpForm() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [agree, setAgree] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const validateFields = (values: { email: string; password: string }) => {
+    const parsed = signupSchema.safeParse(values);
+    if (parsed.success) {
+      return {} as { email?: string; password?: string };
+    }
+
+    const nextErrors: { email?: string; password?: string } = {};
+    for (const issue of parsed.error.issues) {
+      const field = issue.path[0];
+      if ((field === "email" || field === "password") && !nextErrors[field]) {
+        nextErrors[field] = issue.message;
+      }
+    }
+    return nextErrors;
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setSuccess("");
+    const nextFieldErrors = validateFields({ email, password });
+    setFieldErrors(nextFieldErrors);
 
-    if (!agree) {
-      setError("Please accept the Terms of Service and Privacy Policy.");
+    if (Object.keys(nextFieldErrors).length > 0) {
       return;
     }
 
-    if (!email || !password) {
-      setError("Email and password are required.");
+    if (!agree) {
+      setError("Please accept the Terms of Service and Privacy Policy.");
       return;
     }
 
@@ -45,7 +64,7 @@ export default function SignUpForm() {
   };
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
+    <form className="space-y-4" onSubmit={handleSubmit} noValidate>
       <div className="grid sm:grid-cols-2 gap-4">
         <label className="block">
           <span className="text-sm text-slate-300">First Name</span>
@@ -78,9 +97,16 @@ export default function SignUpForm() {
           required
           placeholder="you@example.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            setFieldErrors((prev) => ({ ...prev, email: undefined }));
+            setError("");
+          }}
           className="mt-1.5 w-full rounded-xl border border-slate-700/70 bg-[#0d0d1a] px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
         />
+        {fieldErrors.email ? (
+          <p className="mt-1 text-xs text-red-300">{fieldErrors.email}</p>
+        ) : null}
       </label>
 
       <label className="block">
@@ -88,12 +114,19 @@ export default function SignUpForm() {
         <input
           type="password"
           required
-          minLength={6}
+          minLength={8}
           placeholder="Create a strong password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            setFieldErrors((prev) => ({ ...prev, password: undefined }));
+            setError("");
+          }}
           className="mt-1.5 w-full rounded-xl border border-slate-700/70 bg-[#0d0d1a] px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
         />
+        {fieldErrors.password ? (
+          <p className="mt-1 text-xs text-red-300">{fieldErrors.password}</p>
+        ) : null}
       </label>
 
       <label className="flex items-start gap-3 text-sm text-slate-400">

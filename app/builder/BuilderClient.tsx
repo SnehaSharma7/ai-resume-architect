@@ -110,10 +110,13 @@ export default function BuilderClient() {
   const [state, setState] = useState<BuilderState>(defaultState);
   const [activeSection, setActiveSection] = useState<Section>("personal");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const [rewritingBullet, setRewritingBullet] = useState<string | null>(null); // "expId-idx"
+  const [rewriteError, setRewriteError] = useState("");
   const [isGeneratingCL, setIsGeneratingCL] = useState(false);
+  const [coverLetterError, setCoverLetterError] = useState("");
   const resumeRef = useRef<HTMLDivElement>(null);
 
   const updatePersonal = (field: keyof PersonalInfo, value: string) => {
@@ -181,6 +184,7 @@ export default function BuilderClient() {
   const analyzeJD = async () => {
     if (!state.jobDescription.trim()) return;
     setIsAnalyzing(true);
+    setAnalysisError("");
 
     try {
       const resumeText = [
@@ -196,6 +200,10 @@ export default function BuilderClient() {
       });
 
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Unable to analyze job description.");
+      }
+
       setState((prev) => ({
         ...prev,
         atsScore: data.score ?? 0,
@@ -204,7 +212,8 @@ export default function BuilderClient() {
         missingKeywords: data.missing ?? [],
         suggestions: data.suggestions ?? [],
       }));
-    } catch {
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Unable to analyze job description.");
       // Fallback to simple analysis
       setState((prev) => ({
         ...prev,
@@ -222,6 +231,7 @@ export default function BuilderClient() {
   const rewriteBullet = async (expId: string, bulletIdx: number) => {
     const key = `${expId}-${bulletIdx}`;
     setRewritingBullet(key);
+    setRewriteError("");
 
     try {
       const exp = state.experience.find((e) => e.id === expId);
@@ -243,11 +253,15 @@ export default function BuilderClient() {
       });
 
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to rewrite bullet.");
+      }
+
       if (data.rewritten) {
         updateBullet(expId, bulletIdx, data.rewritten);
       }
-    } catch {
-      // silently fail
+    } catch (error) {
+      setRewriteError(error instanceof Error ? error.message : "Failed to rewrite bullet.");
     } finally {
       setRewritingBullet(null);
     }
@@ -256,6 +270,7 @@ export default function BuilderClient() {
   const generateCoverLetter = async () => {
     if (!state.personal.name || !state.jobDescription) return;
     setIsGeneratingCL(true);
+    setCoverLetterError("");
 
     try {
       const experience = state.experience
@@ -281,11 +296,17 @@ export default function BuilderClient() {
       });
 
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to generate cover letter.");
+      }
+
       setState((prev) => ({ ...prev, coverLetter: data.coverLetter ?? "" }));
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to generate cover letter.";
+      setCoverLetterError(message);
       setState((prev) => ({
         ...prev,
-        coverLetter: "Failed to generate cover letter. Please try again.",
+        coverLetter: message,
       }));
     } finally {
       setIsGeneratingCL(false);
@@ -734,6 +755,18 @@ export default function BuilderClient() {
                 )}
               </button>
 
+              {analysisError && (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  {analysisError}
+                </div>
+              )}
+
+              {rewriteError && (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  {rewriteError}
+                </div>
+              )}
+
               {state.atsScore !== null && (
                 <div className="bg-[#111122] border border-violet-800/40 rounded-xl p-5 space-y-4">
                   <div className="flex items-center gap-5">
@@ -822,6 +855,13 @@ export default function BuilderClient() {
                   </>
                 )}
               </button>
+
+              {coverLetterError && (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  {coverLetterError}
+                </div>
+              )}
+
               {state.coverLetter && (
                 <div className="space-y-3">
                   <textarea

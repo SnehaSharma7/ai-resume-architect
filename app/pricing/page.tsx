@@ -65,8 +65,8 @@ export default function PricingPage() {
 
       const data = await res.json();
 
-      if (data.error) {
-        setError(data.error);
+      if (!res.ok) {
+        setError(data?.error || "Unable to create payment order.");
         setLoading(false);
         return;
       }
@@ -86,10 +86,11 @@ export default function PricingPage() {
             body: JSON.stringify(response),
           });
           const verifyData = await verifyRes.json();
-          if (verifyData.verified) {
+          if (verifyRes.ok && verifyData.verified) {
             window.location.href = "/dashboard?upgraded=true";
           } else {
-            setError("Payment verification failed. Please contact support.");
+            setError(verifyData?.error || "Payment verification failed. Please contact support.");
+            setLoading(false);
           }
         },
         prefill: {
