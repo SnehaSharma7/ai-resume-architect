@@ -112,7 +112,7 @@ export default async function DashboardPage() {
 
                   {/* PDF */}
                   <a
-                    href={`/api/pdf?id=${resume.id}`}
+                   href={`/builder?id=${resume.id}`}
                     className="px-3 py-1 text-xs bg-violet-600 text-white rounded"
                   >
                     PDF
@@ -120,7 +120,7 @@ export default async function DashboardPage() {
 
                   {/* DELETE */}
                   <form
-                    action={`/api/delete?id=${resume.id}`}
+                   action={`/api/resumes/${resume.id}`}
                     method="POST"
                   >
                     <button
