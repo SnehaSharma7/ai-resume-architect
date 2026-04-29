@@ -8,6 +8,5 @@ export async function POST(
 
   console.log("Deleting resume:", id);
 
-  // TEMP delete (just redirect for now)
   return NextResponse.redirect(new URL("/dashboard", request.url));
 }

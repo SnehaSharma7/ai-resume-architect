@@ -111,10 +111,10 @@ export default async function DashboardPage() {
                   </Link>
 
                   {/* PDF */}
-                  <a
-                   href={`/builder?id=${resume.id}`}
-                    className="px-3 py-1 text-xs bg-violet-600 text-white rounded"
-                  >
+                 <a
+                   href={`/api/pdf?id=${resume.id}`}
+                   className="px-3 py-1 text-xs bg-violet-600 text-white rounded"
+                   >
                     PDF
                   </a>
 
