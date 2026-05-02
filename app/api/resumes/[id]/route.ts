@@ -19,7 +19,7 @@ function isAuthorized(req: NextRequest) {
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = isAuthorized(req);
 
@@ -34,7 +34,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = params;
+  const { id } = await params;
 
   if (typeof id !== "string" || id.trim().length === 0) {
     return NextResponse.json({ error: "Invalid resume id" }, { status: 400 });

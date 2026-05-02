@@ -1,6 +1,6 @@
-import Link from "next/link";
 import Footer from "@/app/components/Footer";
 import BackendResumes from "@/app/dashboard/BackendResumes";
+import MockResumes from "@/app/dashboard/MockResumes";
 import AuthGuard from "@/app/components/AuthGuard";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
@@ -85,56 +85,7 @@ export default async function DashboardPage() {
             <BackendResumes />
 
             {/* MOCK DATA */}
-            {mockResumes.map((resume) => (
-              <div
-                key={resume.id}
-                className="bg-[#111122] border border-slate-800 rounded-xl p-4 flex justify-between items-center"
-              >
-                <div>
-                  <h3 className="text-white font-semibold">
-                    {resume.title}
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Updated {resume.updatedAt}
-                  </p>
-                </div>
-
-                {/* ✅ FIXED BUTTONS */}
-                <div className="flex gap-2">
-
-                  {/* EDIT */}
-                  <Link
-                    href={`/builder?id=${resume.id}`}
-                    className="px-3 py-1 text-xs bg-slate-700 text-white rounded"
-                  >
-                    Edit
-                  </Link>
-
-                  {/* PDF */}
-                 <button
-                   onClick={() => window.open(`/api/pdf?id=${resume.id}`)}
-                   className="px-3 py-1 text-xs bg-violet-600 text-white rounded"
-                 >
-                   PDF
-                 </button>
-
-                  {/* DELETE */}
-                  
-                  <button
-                    onClick={async () => {
-                      await fetch(`/api/resumes/${resume.id}`, {
-                        method: "DELETE",
-                      });
-                      alert("Deleted!");
-                   }}
-                   className="px-3 py-1 text-xs bg-red-600 text-white rounded"
-                 >
-                   Delete
-                 </button>
-
-                </div>
-              </div>
-            ))}
+            <MockResumes resumes={mockResumes} />
 
           </div>
         </div>
