@@ -111,6 +111,7 @@ export default async function DashboardPage() {
                   </Link>
 
                   {/* PDF */}
+<<<<<<< HEAD
                  <a
                    href={`/api/pdf?id=${resume.id}`}
                    className="px-3 py-1 text-xs bg-violet-600 text-white rounded"
@@ -130,6 +131,28 @@ export default async function DashboardPage() {
                       Delete
                     </button>
                   </form>
+=======
+                 <button
+                   onClick={() => window.open(`/api/pdf?id=${resume.id}`)}
+                   className="px-3 py-1 text-xs bg-violet-600 text-white rounded"
+                 >
+                   PDF
+                 </button>
+
+                  {/* DELETE */}
+                  
+                  <button
+                    onClick={async () => {
+                      await fetch(`/api/resumes/${resume.id}`, {
+                        method: "DELETE",
+                      });
+                      alert("Deleted!");
+                   }}
+                   className="px-3 py-1 text-xs bg-red-600 text-white rounded"
+                 >
+                   Delete
+                 </button>
+>>>>>>> udita-backend-new
 
                 </div>
               </div>
@@ -137,7 +160,10 @@ export default async function DashboardPage() {
 
           </div>
         </div>
+<<<<<<< HEAD
 
+=======
+>>>>>>> udita-backend-new
       </div>
 
       <Footer />
