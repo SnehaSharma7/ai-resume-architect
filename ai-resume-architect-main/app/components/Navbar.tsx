@@ -1,0 +1,214 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { getSession, clearSession } from "@/lib/auth";
+import { getSession as getNextAuthSession, signOut } from "next-auth/react";
+
+type AuthSource = "local" | "oauth";
+
+export default function Navbar() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [authSource, setAuthSource] = useState<AuthSource | null>(null);
+  const pathname = usePathname();
+  const router = useRouter();
+
+  // Refresh session state on route changes
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveSession = async () => {
+      const localSession = getSession();
+      if (localSession) {
+        if (!cancelled) {
+          setUserEmail(localSession.email);
+          setUserName(null);
+          setAuthSource("local");
+        }
+        return;
+      }
+
+      const oauthSession = await getNextAuthSession();
+      const oauthEmail = oauthSession?.user?.email ?? null;
+      if (!cancelled) {
+        setUserEmail(oauthEmail);
+        setUserName(oauthSession?.user?.name ?? null);
+        setAuthSource(oauthEmail ? "oauth" : null);
+      }
+    };
+
+    void resolveSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
+
+  const handleLogout = () => {
+    if (authSource === "oauth") {
+      void signOut({ callbackUrl: "/" });
+      return;
+    }
+
+    clearSession();
+    setUserEmail(null);
+    setAuthSource(null);
+    router.push("/");
+  };
+
+  const navLinks = [
+    { label: "Features", href: "/#features" },
+    { label: "How it Works", href: "/#how-it-works" },
+    { label: "Pricing", href: "/pricing" },
+    { label: "Dashboard", href: "/dashboard" },
+  ];
+
+  const isBuilder = pathname === "/builder";
+  const isAuthPage = pathname === "/signin" || pathname === "/signup";
+
+  return (
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0d0d1a]/90 backdrop-blur-md border-b border-violet-900/30">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/resume-builder.jpg"
+              alt="CareerForge Pro logo"
+              width={32}
+              height={32}
+              className="rounded-lg object-cover"
+            />
+            <span className="text-white font-bold text-lg">
+              CareerForge{" "}
+              <span className="text-violet-400">Pro</span>
+            </span>
+          </Link>
+
+          {/* Desktop Nav Links */}
+          {!isBuilder && !isAuthPage && (
+            <div className="hidden md:flex items-center gap-6">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="text-slate-400 hover:text-white text-sm transition-colors duration-200"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          )}
+
+          {/* Desktop CTA Buttons */}
+          <div className="hidden md:flex items-center gap-3">
+            {isBuilder || isAuthPage ? (
+              <Link
+                href="/dashboard"
+                className="text-slate-400 hover:text-white text-sm transition-colors px-3 py-1.5"
+              >
+                ← Dashboard
+              </Link>
+            ) : userEmail ? (
+              <>
+                <span className="text-xs text-slate-500 max-w-[140px] truncate">{userName ?? userEmail}</span>
+                <button
+                  onClick={handleLogout}
+                  className="text-slate-400 hover:text-white text-sm bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/40 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/signin"
+                  className="text-slate-400 hover:text-white text-sm transition-colors px-3 py-1.5"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/signup"
+                  className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors duration-200 shadow-lg shadow-violet-900/50"
+                >
+                  Get Started
+                </Link>
+              </>
+            )}
+          </div>
+
+          {/* Mobile Menu Toggle */}
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="md:hidden p-2 text-slate-400 hover:text-white transition-colors"
+            aria-label="Toggle menu"
+          >
+            {isOpen ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+        </div>
+
+        {/* Mobile Menu */}
+        {isOpen && (
+          <div className="md:hidden border-t border-violet-900/30 py-4 space-y-1">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setIsOpen(false)}
+                className="block text-slate-400 hover:text-white text-sm py-2.5 px-2 rounded-lg hover:bg-violet-900/20 transition-colors"
+              >
+                {link.label}
+              </Link>
+            ))}
+            <div className="pt-2 space-y-2">
+                {userEmail ? (
+                  <button
+                    onClick={() => { setIsOpen(false); handleLogout(); }}
+                    className="block w-full text-left bg-slate-800/60 text-slate-300 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+                  >
+                    Sign Out ({userEmail})
+                  </button>
+                ) : (
+                  <>
+                    <Link
+                      href="/signin"
+                      onClick={() => setIsOpen(false)}
+                      className="block text-slate-300 hover:text-white text-sm py-2.5 px-2 rounded-lg hover:bg-violet-900/20 transition-colors"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      href="/signup"
+                      onClick={() => setIsOpen(false)}
+                      className="block bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors text-center"
+                    >
+                      Create Account
+                    </Link>
+                  </>
+                )}
+              <Link
+                href="/builder"
+                onClick={() => setIsOpen(false)}
+                className="block bg-slate-800/60 hover:bg-slate-700/60 text-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors text-center"
+              >
+                Open Builder
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
+    </nav>
+  );
+}
