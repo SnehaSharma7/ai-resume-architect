@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Script from "next/script";
 import { getSession } from "@/lib/auth";
+import { getSession as getNextAuthSession } from "next-auth/react";
 
 declare global {
   interface Window {
@@ -51,16 +52,24 @@ export default function PricingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const resolveEmailForCheckout = async () => {
+    const localSession = getSession();
+    if (localSession?.email) return localSession.email;
+
+    const oauthSession = await getNextAuthSession();
+    return oauthSession?.user?.email ?? undefined;
+  };
+
   const handleUpgrade = async () => {
     setLoading(true);
     setError("");
 
     try {
-      const session = getSession();
+      const email = await resolveEmailForCheckout();
       const res = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: session?.email ?? "" }),
+        body: JSON.stringify({ email }),
       });
 
       const data = await res.json();
@@ -94,7 +103,7 @@ export default function PricingPage() {
           }
         },
         prefill: {
-          email: session?.email ?? "",
+          email: email ?? "",
         },
         theme: {
           color: "#7c3aed",

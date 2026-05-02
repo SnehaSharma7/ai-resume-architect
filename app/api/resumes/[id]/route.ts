@@ -1,52 +1,98 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  deleteLocalResume,
+  getLocalResumeById,
+  updateLocalResume,
+} from "@/lib/resumeStore";
 
-function isAuthorized(req: NextRequest) {
-  const configuredToken = process.env.RESUME_DELETE_API_TOKEN;
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://127.0.0.1:5000";
 
-  if (!configuredToken) {
-    return { ok: false as const, reason: "server-misconfigured" };
-  }
-
-  const authorization = req.headers.get("authorization");
-  const [scheme, token] = authorization?.split(" ") ?? [];
-
-  if (scheme !== "Bearer" || !token || token !== configuredToken) {
-    return { ok: false as const, reason: "unauthorized" };
-  }
-
-  return { ok: true as const };
-}
-
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+async function proxyResumeRequest(
+  method: "GET" | "PUT" | "DELETE",
+  request: NextRequest,
+  id: string
 ) {
-  const auth = isAuthorized(req);
+  const resumeId = Number(id);
 
-  if (!auth.ok) {
-    if (auth.reason === "server-misconfigured") {
-      return NextResponse.json(
-        { error: "Resume deletion is not configured on this server." },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id } = await params;
-
-  if (typeof id !== "string" || id.trim().length === 0) {
+  if (!Number.isInteger(resumeId) || resumeId <= 0) {
     return NextResponse.json({ error: "Invalid resume id" }, { status: 400 });
   }
 
-  console.log("Delete requested for resume:", id);
+  try {
+    const response = await fetch(`${API_BASE_URL}/resumes/${id}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: method === "PUT" ? await request.text() : undefined,
+      cache: "no-store",
+    });
 
-  return NextResponse.json(
-    {
-      error: "Resume deletion is not implemented.",
-      id,
-    },
-    { status: 501 }
-  );
+    const body = await response.json().catch(() => ({}));
+
+    if (!response.ok && method === "GET") {
+      const local = getLocalResumeById(resumeId);
+      if (local) {
+        return NextResponse.json({ resume: local });
+      }
+    }
+
+    return NextResponse.json(body, { status: response.status });
+  } catch {
+    if (method === "GET") {
+      const local = getLocalResumeById(resumeId);
+      if (!local) {
+        return NextResponse.json({ error: "Resume not found" }, { status: 404 });
+      }
+      return NextResponse.json({ resume: local });
+    }
+
+    if (method === "PUT") {
+      const payload = (await request.json().catch(() => ({}))) as {
+        name?: string;
+        skills?: string;
+        education?: string;
+        experience?: string;
+      };
+
+      const updated = updateLocalResume(resumeId, payload);
+      if (!updated) {
+        return NextResponse.json({ error: "Resume not found" }, { status: 404 });
+      }
+
+      return NextResponse.json({ message: "Resume updated", resume: updated });
+    }
+
+    const deleted = deleteLocalResume(resumeId);
+    if (!deleted) {
+      return NextResponse.json({ error: "Resume not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ message: "Resume deleted", id: resumeId });
+  }
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  return proxyResumeRequest("GET", request, id);
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  return proxyResumeRequest("PUT", request, id);
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  return proxyResumeRequest("DELETE", request, id);
 }

@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { generateResume as generateResumeRequest } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  generateResume as generateResumeRequest,
+  getResumeById,
+  updateResume,
+} from "@/lib/api";
 
 type Section = "personal" | "experience" | "education" | "skills" | "jd" | "coverletter";
 
@@ -74,6 +79,162 @@ const defaultState: BuilderState = {
   coverLetter: "",
 };
 
+function parseResumeContent(content: string): Partial<BuilderState> {
+  const lines = content.split("\n").map((line) => line.trim());
+  const personal = {
+    name: "",
+    title: "",
+    email: "",
+    phone: "",
+    location: "",
+    linkedin: "",
+    summary: "",
+  };
+  const sections: Record<"skills" | "education" | "experience", string[]> = {
+    skills: [],
+    education: [],
+    experience: [],
+  };
+  let current: keyof typeof sections | null = null;
+
+  for (const line of lines) {
+    if (!line || line.startsWith("====")) continue;
+
+    if (line.toLowerCase().startsWith("name:")) {
+      personal.name = line.split(":", 2)[1]?.trim() ?? "";
+      current = null;
+      continue;
+    }
+
+    if (line.toLowerCase().startsWith("title:")) {
+      personal.title = line.split(":", 2)[1]?.trim() ?? "";
+      current = null;
+      continue;
+    }
+
+    if (line.toLowerCase().startsWith("email:")) {
+      personal.email = line.split(":", 2)[1]?.trim() ?? "";
+      current = null;
+      continue;
+    }
+
+    if (line.toLowerCase().startsWith("phone:")) {
+      personal.phone = line.split(":", 2)[1]?.trim() ?? "";
+      current = null;
+      continue;
+    }
+
+    if (line.toLowerCase().startsWith("location:")) {
+      personal.location = line.split(":", 2)[1]?.trim() ?? "";
+      current = null;
+      continue;
+    }
+
+    if (line.toLowerCase().startsWith("linkedin:")) {
+      personal.linkedin = line.split(":", 2)[1]?.trim() ?? "";
+      current = null;
+      continue;
+    }
+
+    if (line.toLowerCase().startsWith("summary:")) {
+      personal.summary = line.split(":", 2)[1]?.trim() ?? "";
+      current = null;
+      continue;
+    }
+
+    if (line.toLowerCase() === "skills:") {
+      current = "skills";
+      continue;
+    }
+
+    if (line.toLowerCase() === "education:") {
+      current = "education";
+      continue;
+    }
+
+    if (line.toLowerCase() === "experience:") {
+      current = "experience";
+      continue;
+    }
+
+    if (current) sections[current].push(line);
+  }
+
+  const experienceRows = sections.experience.length > 0 ? sections.experience : [""];
+  const parsedExperience = experienceRows.map((row, index) => {
+    const [headline, details] = row.split(":", 2);
+    const headlineParts = (headline || "").split("-").map((part) => part.trim()).filter(Boolean);
+
+    return {
+      id: `${index + 1}`,
+      role: headlineParts[0] || "",
+      company: headlineParts[1] || "",
+      period: headlineParts[2] || "",
+      bullets:
+        details
+          ?.split(";")
+          .map((bullet) => bullet.trim())
+          .filter(Boolean) ?? [""],
+    };
+  });
+
+  return {
+    personal: {
+      ...defaultState.personal,
+      ...personal,
+      title: personal.title || parsedExperience[0]?.role || "",
+      summary: personal.summary || sections.experience.join(" "),
+    },
+    skills: sections.skills.join("\n"),
+    education:
+      sections.education.length > 0
+        ? sections.education.map((entry, index) => ({
+            id: `${index + 1}`,
+            institution: "",
+            degree: entry,
+            year: "",
+          }))
+        : defaultState.education,
+    experience: parsedExperience,
+  };
+}
+
+function buildResumePayloadFromState(state: BuilderState) {
+  const name = state.personal.name.trim();
+  const title = state.personal.title.trim();
+  const email = state.personal.email.trim();
+  const phone = state.personal.phone.trim();
+  const location = state.personal.location.trim();
+  const linkedin = state.personal.linkedin.trim();
+  const summary = state.personal.summary.trim();
+  const skills = state.skills.trim();
+  const education = state.education
+    .map((item) => [item.degree, item.institution, item.year].filter(Boolean).join(" - "))
+    .filter(Boolean)
+    .join("\n");
+  const experience = state.experience
+    .map((item) => {
+      const headline = [item.role, item.company, item.period].filter(Boolean).join(" - ");
+      const bullets = item.bullets.filter(Boolean).join("; ");
+      return [headline, bullets].filter(Boolean).join(": ");
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    name,
+    title,
+    email,
+    phone,
+    location,
+    linkedin,
+    summary,
+    skills,
+    education,
+    experience,
+  };
+}
+
 function ScoreRing({ score }: { score: number }) {
   const radius = 36;
   const circumference = 2 * Math.PI * radius;
@@ -106,18 +267,76 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-export default function BuilderClient() {
+type BuilderClientProps = {
+  resumeId?: number | null;
+};
+
+export default function BuilderClient({ resumeId = null }: BuilderClientProps) {
+  const searchParams = useSearchParams();
+  const resumeIdFromQueryRaw = Number(searchParams.get("resumeId"));
+  const resumeIdFromQuery =
+    Number.isInteger(resumeIdFromQueryRaw) && resumeIdFromQueryRaw > 0
+      ? resumeIdFromQueryRaw
+      : null;
+  const effectiveResumeId = resumeIdFromQuery ?? resumeId;
+
   const [state, setState] = useState<BuilderState>(defaultState);
+  const [currentResumeId, setCurrentResumeId] = useState<number | null>(effectiveResumeId);
   const [activeSection, setActiveSection] = useState<Section>("personal");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
+  const [isHydrating, setIsHydrating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const [rewritingBullet, setRewritingBullet] = useState<string | null>(null); // "expId-idx"
   const [rewriteError, setRewriteError] = useState("");
   const [isGeneratingCL, setIsGeneratingCL] = useState(false);
   const [coverLetterError, setCoverLetterError] = useState("");
+  const [isCopied, setIsCopied] = useState(false);
   const resumeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!effectiveResumeId) return;
+
+    let isMounted = true;
+
+    const loadResume = async () => {
+      setIsHydrating(true);
+      setExportError("");
+
+      try {
+        const response = await getResumeById(effectiveResumeId);
+        if (!isMounted) return;
+
+        const parsed = parseResumeContent(response.resume.content);
+        setState((prev) => ({
+          ...prev,
+          ...parsed,
+          personal: {
+            ...prev.personal,
+            ...(parsed.personal || {}),
+          },
+        }));
+      } catch (error) {
+        if (!isMounted) return;
+        setExportError(error instanceof Error ? error.message : "Unable to load resume for editing.");
+      } finally {
+        if (isMounted) setIsHydrating(false);
+      }
+    };
+
+    void loadResume();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveResumeId]);
+
+  useEffect(() => {
+    setCurrentResumeId(effectiveResumeId);
+  }, [effectiveResumeId]);
 
   const updatePersonal = (field: keyof PersonalInfo, value: string) => {
     setState((prev) => ({ ...prev, personal: { ...prev.personal, [field]: value } }));
@@ -315,21 +534,10 @@ export default function BuilderClient() {
 
   const handleExportPDF = async () => {
     setExportError("");
+    setSaveMessage("");
 
-    const name = state.personal.name.trim();
-    const skills = state.skills.trim();
-    const education = state.education
-      .map((item) => [item.degree, item.institution, item.year].filter(Boolean).join(" - "))
-      .filter(Boolean)
-      .join("\n");
-    const experience = state.experience
-      .map((item) => {
-        const headline = [item.role, item.company, item.period].filter(Boolean).join(" - ");
-        const bullets = item.bullets.filter(Boolean).join("; ");
-        return [headline, bullets].filter(Boolean).join(": ");
-      })
-      .filter(Boolean)
-      .join("\n");
+    const payload = buildResumePayloadFromState(state);
+    const { name } = payload;
 
     if (!name) {
       setExportError("Please fill in at least your name before exporting.");
@@ -338,9 +546,13 @@ export default function BuilderClient() {
 
     setIsExporting(true);
     try {
-      // Save to backend
-      if (skills && education && experience) {
-        await generateResumeRequest({ name, skills, education, experience }).catch(() => {});
+      if (currentResumeId) {
+        await updateResume(currentResumeId, payload);
+      } else {
+        const created = await generateResumeRequest(payload);
+        if (typeof created.resumeId === "number") {
+          setCurrentResumeId(created.resumeId);
+        }
       }
 
       // Print the resume preview as PDF
@@ -399,6 +611,47 @@ export default function BuilderClient() {
     }
   };
 
+  const handleSaveResume = async () => {
+    setExportError("");
+    setSaveMessage("");
+
+    const name = state.personal.name.trim();
+    if (!name) {
+      setExportError("Please fill in at least your name before saving.");
+      return;
+    }
+
+    const payload = buildResumePayloadFromState(state);
+
+    setIsSaving(true);
+    try {
+      if (currentResumeId) {
+        await updateResume(currentResumeId, payload);
+      } else {
+        const created = await generateResumeRequest(payload);
+        if (typeof created.resumeId === "number") {
+          setCurrentResumeId(created.resumeId);
+        }
+      }
+
+      setSaveMessage("Resume saved. It is now visible on your dashboard.");
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Failed to save resume.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCopyCoverLetter = async () => {
+    try {
+      await navigator.clipboard.writeText(state.coverLetter);
+      setIsCopied(true);
+      window.setTimeout(() => setIsCopied(false), 1800);
+    } catch {
+      setCoverLetterError("Failed to copy cover letter. Please try again.");
+    }
+  };
+
   const sections: { id: Section; label: string }[] = [
     { id: "personal", label: "Personal" },
     { id: "experience", label: "Experience" },
@@ -418,6 +671,11 @@ export default function BuilderClient() {
       <div className="lg:w-[46%] xl:w-2/5 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800/50 overflow-y-auto">
         {/* Section tabs */}
         <div className="sticky top-0 z-10 bg-[#0d0d1a] border-b border-slate-800/50 px-4 py-3">
+          {isHydrating && (
+            <div className="mb-3 rounded-lg border border-violet-700/40 bg-violet-900/20 px-3 py-2 text-xs text-violet-200">
+              Loading resume data...
+            </div>
+          )}
           <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
             {sections.map((s) => (
               <button
@@ -871,9 +1129,7 @@ export default function BuilderClient() {
                     onChange={(e) => setState((prev) => ({ ...prev, coverLetter: e.target.value }))}
                   />
                   <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(state.coverLetter);
-                    }}
+                    onClick={() => void handleCopyCoverLetter()}
                     className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1.5 transition-colors"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -881,6 +1137,9 @@ export default function BuilderClient() {
                     </svg>
                     Copy to Clipboard
                   </button>
+                  {isCopied ? (
+                    <p className="text-xs text-emerald-400">Copied!</p>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -904,6 +1163,16 @@ export default function BuilderClient() {
               </div>
             )}
             <button
+              onClick={handleSaveResume}
+              disabled={isSaving}
+              className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-lg shadow-emerald-900/40"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              {isSaving ? "Saving..." : currentResumeId ? "Save Changes" : "Save Resume"}
+            </button>
+            <button
               onClick={handleExportPDF}
               disabled={isExporting}
               className="text-xs bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-lg shadow-violet-900/50"
@@ -914,6 +1183,11 @@ export default function BuilderClient() {
               {isExporting ? "Exporting..." : "Export PDF"}
             </button>
           </div>
+          {saveMessage ? (
+            <div className="mx-4 mt-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+              {saveMessage}
+            </div>
+          ) : null}
           {exportError ? (
             <div className="mx-4 mt-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
               {exportError}

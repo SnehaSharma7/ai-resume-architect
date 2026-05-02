@@ -86,6 +86,12 @@ export type MeResponse = {
 
 export type GenerateResumePayload = {
   name: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  linkedin?: string;
+  summary?: string;
   skills: string;
   education: string;
   experience: string;
@@ -93,11 +99,70 @@ export type GenerateResumePayload = {
 
 export type GenerateResumeResponse = {
   resume: string;
+  resumeId?: number;
+};
+
+export type ResumeRecord = {
+  id: number;
+  title: string;
+  content: string;
 };
 
 export type ResumeListResponse = {
-  resumes: string[];
+  resumes: ResumeRecord[];
 };
+
+type ResumeItemResponse = {
+  resume: ResumeRecord;
+};
+
+function extractNameFromContent(content: string): string {
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.toLowerCase().startsWith("name:")) {
+      const value = trimmed.split(":", 2)[1]?.trim() ?? "";
+      return value || "Untitled Resume";
+    }
+  }
+
+  return content.trim() || "Untitled Resume";
+}
+
+function normalizeResume(item: unknown, fallbackId: number): ResumeRecord {
+  if (typeof item === "string") {
+    return {
+      id: fallbackId,
+      title: extractNameFromContent(item),
+      content: item,
+    };
+  }
+
+  if (typeof item === "object" && item) {
+    const maybeItem = item as {
+      id?: unknown;
+      title?: unknown;
+      content?: unknown;
+    };
+
+    const content = typeof maybeItem.content === "string" ? maybeItem.content : "";
+    const title =
+      typeof maybeItem.title === "string" && maybeItem.title.trim().length > 0
+        ? maybeItem.title
+        : extractNameFromContent(content);
+
+    return {
+      id: typeof maybeItem.id === "number" ? maybeItem.id : fallbackId,
+      title,
+      content,
+    };
+  }
+
+  return {
+    id: fallbackId,
+    title: "Untitled Resume",
+    content: "",
+  };
+}
 
 export function signup(email: string, password: string) {
   return apiRequest<AuthResponse>("/signup", {
@@ -139,46 +204,42 @@ export function getMe(token: string) {
 }
 
 export function generateResume(payload: GenerateResumePayload) {
-  return apiRequest<GenerateResumeResponse>("/generate-resume", {
+  return localRequest<GenerateResumeResponse>("/api/resumes", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export function getResumes() {
-  return apiRequest<ResumeListResponse>("/resumes", {
+  return localRequest<{ resumes: unknown[] }>("/api/resumes", {
     method: "GET",
-  }).catch(async (backendError) => {
-    // Fallback to local Next API so dashboard still works when external backend is offline.
-    const response = await fetch("/api/resumes", {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-    });
+  })
+    .then((response) => ({
+      resumes: Array.isArray(response.resumes)
+        ? response.resumes.map((item, index) => normalizeResume(item, index + 1))
+        : [],
+    }));
+}
 
-    if (!response.ok) {
-      throw backendError;
-    }
+export function getResumeById(id: number) {
+  return localRequest<ResumeItemResponse>(`/api/resumes/${id}`, {
+    method: "GET",
+  }).then((response) => ({
+    resume: normalizeResume(response.resume, id),
+  }));
+}
 
-    const body = await response.json().catch(() => ({}));
+export function updateResume(id: number, payload: GenerateResumePayload) {
+  return localRequest<ResumeItemResponse>(`/api/resumes/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  }).then((response) => ({
+    resume: normalizeResume(response.resume, id),
+  }));
+}
 
-    if (Array.isArray(body?.resumes)) {
-      return { resumes: body.resumes.map((item: unknown) => String(item)) };
-    }
-
-    // Backward compatibility in case local route returns a bare array.
-    if (Array.isArray(body)) {
-      return {
-        resumes: body.map((item: unknown) => {
-          if (typeof item === "string") return item;
-          if (typeof item === "object" && item && "title" in item) {
-            const title = (item as { title?: unknown }).title;
-            return typeof title === "string" ? title : "Untitled Resume";
-          }
-          return "Untitled Resume";
-        }),
-      };
-    }
-
-    throw backendError;
+export function deleteResume(id: number) {
+  return localRequest<{ id: number; message?: string }>(`/api/resumes/${id}`, {
+    method: "DELETE",
   });
 }

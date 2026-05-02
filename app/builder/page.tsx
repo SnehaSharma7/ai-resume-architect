@@ -6,6 +6,13 @@ export const metadata: Metadata = {
   description: "Build and optimize your ATS-proof resume with live preview and AI rewriting.",
 };
 
-export default function BuilderPage() {
-  return <BuilderClient />;
+type BuilderPageProps = {
+  searchParams: Promise<{ resumeId?: string }>;
+};
+
+export default async function BuilderPage({ searchParams }: BuilderPageProps) {
+  const resolvedParams = await searchParams;
+  const resumeId = Number(resolvedParams.resumeId);
+
+  return <BuilderClient resumeId={Number.isInteger(resumeId) && resumeId > 0 ? resumeId : null} />;
 }

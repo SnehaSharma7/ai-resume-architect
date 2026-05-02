@@ -2,15 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getResumes } from "@/lib/api";
-
-function extractName(resume: string): string {
-  const match = resume.match(/Name:\s*(.+)/i);
-  return match ? match[1].trim() : (resume.trim() || "Untitled Resume");
-}
+import { getResumes, type ResumeRecord } from "@/lib/api";
 
 export default function BackendResumes() {
-  const [resumes, setResumes] = useState<string[]>([]);
+  const [resumes, setResumes] = useState<ResumeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -72,7 +67,7 @@ export default function BackendResumes() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-1">
-                <h3 className="text-white font-semibold text-sm truncate">{extractName(resume)}</h3>
+                <h3 className="text-white font-semibold text-sm truncate">{resume.title}</h3>
                 <span className="text-xs px-2.5 py-1 rounded-full border bg-emerald-900/30 text-emerald-400 border-emerald-700/40">Saved</span>
               </div>
               <div className="text-xs text-slate-500">Generated via Builder</div>
