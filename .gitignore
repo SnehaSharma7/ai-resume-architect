@@ -1,4 +1,7 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 9e458fe6a1739af93cf02472f757e7d9f4d33a68
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
@@ -40,8 +43,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+<<<<<<< HEAD
 =======
 node_modules
 .next
 .env
 >>>>>>> udita-backend-new
+=======
+>>>>>>> 9e458fe6a1739af93cf02472f757e7d9f4d33a68
